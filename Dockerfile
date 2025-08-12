@@ -84,9 +84,12 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && rm -rf /var/lib/apt/lists/*
 
 # Create docker group first, then create a non-root user for running the application
+# Also create dockerhost group with GID 121 to match typical Docker socket group
 RUN groupadd -g 999 docker 2>/dev/null || true \
+    && groupadd -g 121 dockerhost 2>/dev/null || true \
     && useradd -m -u 1001 -s /bin/bash claudeuser \
-    && usermod -aG docker claudeuser 2>/dev/null || true
+    && usermod -aG docker claudeuser 2>/dev/null || true \
+    && usermod -aG dockerhost claudeuser 2>/dev/null || true
 
 # Create necessary directories and set permissions while still root
 RUN mkdir -p /home/claudeuser/.npm-global \
