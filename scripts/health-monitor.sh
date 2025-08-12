@@ -2,6 +2,9 @@
 # Health monitoring script for Claude webhook
 # Add to crontab: */5 * * * * /home/daniel/claude-hub/scripts/health-monitor.sh
 
+# Change to the project directory
+cd /home/daniel/claude-hub
+
 WEBHOOK_URL="http://localhost:3002/health"
 LOG_FILE="/home/daniel/claude-hub/logs/health-monitor.log"
 SLACK_WEBHOOK="" # Add your Slack webhook URL for notifications
@@ -31,16 +34,15 @@ send_notification() {
 }
 
 # Check if container is running (look for "Up" in status)
-if ! docker compose ps webhook | grep -q "Up "; then
+if ! docker compose ps webhook | grep -E "Up[[:space:]]" > /dev/null 2>&1; then
     log_message "Container not running, attempting restart..."
     
-    cd /home/daniel/claude-hub
     docker compose down
     docker compose up -d
     
     sleep 10
     
-    if docker compose ps webhook | grep -q "Up "; then
+    if docker compose ps webhook | grep -E "Up[[:space:]]" > /dev/null 2>&1; then
         send_notification "Webhook container was down but successfully restarted"
     else
         send_notification "CRITICAL: Failed to restart webhook container"
@@ -54,7 +56,6 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WEBHOOK_URL" 2>/dev/null)
 if [ "$HTTP_STATUS" != "200" ]; then
     log_message "Health check failed with status $HTTP_STATUS, attempting restart..."
     
-    cd /home/daniel/claude-hub
     docker compose restart webhook
     
     sleep 10
