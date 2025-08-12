@@ -46,6 +46,12 @@ setup_claude_auth() {
 clone_repository() {
     log_message "Cloning repository $REPO_FULL_NAME..."
     
+    # Configure git with GitHub token for authentication
+    if [ -n "$GITHUB_TOKEN" ]; then
+        git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+        log_message "Configured GitHub authentication"
+    fi
+    
     cd /workspace
     git clone "https://github.com/${REPO_FULL_NAME}.git" repo 2>&1 | tee -a "$LOG_FILE"
     cd repo
@@ -79,10 +85,11 @@ run_claude() {
     log_message "========== CLAUDE OUTPUT START =========="
     
     # Use script command to capture full terminal output including colors and tool usage
-    script -q -c "echo '$COMMAND' | HOME=/workspace CLAUDE_HOME=/workspace/.claude $CLAUDE_CMD" "$LOG_FILE.raw" 2>&1
+    # Note: Using printf to handle multi-line commands properly
+    script -q -c "printf '%s\n' \"\$COMMAND\" | HOME=/workspace CLAUDE_HOME=/workspace/.claude $CLAUDE_CMD" "$LOG_FILE.raw" 2>&1
     
     # Also capture with regular output for processing
-    echo "$COMMAND" | HOME=/workspace CLAUDE_HOME=/workspace/.claude $CLAUDE_CMD 2>&1 | while IFS= read -r line; do
+    printf '%s\n' "$COMMAND" | HOME=/workspace CLAUDE_HOME=/workspace/.claude $CLAUDE_CMD 2>&1 | while IFS= read -r line; do
         echo "$line" | tee -a "$LOG_FILE"
         
         # Detect and highlight tool usage

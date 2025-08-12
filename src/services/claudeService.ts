@@ -228,9 +228,11 @@ For real functionality, please configure valid GitHub and Claude API tokens.`;
 /**
  * Get entrypoint script for Claude Code execution
  * Uses unified entrypoint that handles all operation types based on OPERATION_TYPE env var
+ * Now with enhanced logging to capture full Claude console output
  */
 function getEntrypointScript(): string {
-  return '/scripts/runtime/claudecode-entrypoint.sh';
+  // Use the logged entrypoint for full session logging
+  return '/scripts/runtime/claudecode-entrypoint-logged.sh';
 }
 
 /**
@@ -388,6 +390,10 @@ function buildDockerArgs({
       : path.resolve(process.cwd(), hostAuthDir);
     dockerArgs.push('-v', `${absoluteAuthDir}:/home/node/.claude`);
   }
+
+  // Mount logs directory for session logging
+  const logsDir = path.resolve(process.cwd(), 'logs');
+  dockerArgs.push('-v', `${logsDir}:/logs`);
 
   // Add environment variables as separate arguments
   Object.entries(envVars)

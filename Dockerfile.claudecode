@@ -77,8 +77,10 @@ RUN chmod +x /usr/local/bin/init-firewall.sh && \
 RUN mkdir -p /scripts/runtime
 COPY scripts/runtime/claudecode-entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/runtime/claudecode-entrypoint.sh /scripts/runtime/claudecode-entrypoint.sh
+COPY scripts/runtime/claudecode-entrypoint-logged.sh /scripts/runtime/claudecode-entrypoint-logged.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && \
-  chmod +x /scripts/runtime/claudecode-entrypoint.sh
+  chmod +x /scripts/runtime/claudecode-entrypoint.sh && \
+  chmod +x /scripts/runtime/claudecode-entrypoint-logged.sh
 
 # Set the default shell to bash
 ENV SHELL /bin/zsh
