@@ -30,8 +30,8 @@ send_notification() {
     # echo "$message" | mail -s "Claude Webhook Alert" admin@example.com
 }
 
-# Check if container is running
-if ! docker compose ps webhook | grep -q "running\|healthy"; then
+# Check if container is running (look for "Up" in status)
+if ! docker compose ps webhook | grep -q "Up "; then
     log_message "Container not running, attempting restart..."
     
     cd /home/daniel/claude-hub
@@ -40,7 +40,7 @@ if ! docker compose ps webhook | grep -q "running\|healthy"; then
     
     sleep 10
     
-    if docker compose ps webhook | grep -q "running\|healthy"; then
+    if docker compose ps webhook | grep -q "Up "; then
         send_notification "Webhook container was down but successfully restarted"
     else
         send_notification "CRITICAL: Failed to restart webhook container"
