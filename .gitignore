@@ -97,3 +97,9 @@ secrets/
 /test-*.js
 /PR_SUMMARY.md
 /*-proposal.md
+
+# Deployment-specific files
+docker-compose.prod.yml
+docker-compose.tunnel.yml
+scripts/claude-webhook.service
+scripts/cloudflared.service
