@@ -8,9 +8,9 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 CONTAINER_NAME="${REPO_FULL_NAME//\//_}_${ISSUE_NUMBER}_${TIMESTAMP}"
 LOG_FILE="$LOG_DIR/${CONTAINER_NAME}.log"
 
-# Function to log with timestamp
+# Function to log with timestamp (only to log file, not stdout)
 log_message() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
 # Start logging
@@ -41,9 +41,9 @@ setup_claude_auth() {
     if [ -d "/home/node/.claude" ]; then
         log_message "Found mounted auth directory"
         mkdir -p /workspace/.claude
-        cp -r /home/node/.claude/* /workspace/.claude/ 2>&1 | tee -a "$LOG_FILE" || true
-        cp -r /home/node/.claude/.* /workspace/.claude/ 2>&1 | grep -v "omitting directory" | tee -a "$LOG_FILE" || true
-        chown -R node:node /workspace/.claude 2>&1 | tee -a "$LOG_FILE"
+        cp -r /home/node/.claude/* /workspace/.claude/ 2>&1 >> "$LOG_FILE" || true
+        cp -r /home/node/.claude/.* /workspace/.claude/ 2>&1 | grep -v "omitting directory" >> "$LOG_FILE" || true
+        chown -R node:node /workspace/.claude 2>&1 >> "$LOG_FILE"
         chmod 600 /workspace/.claude/.credentials.json 2>/dev/null || true
         log_message "Authentication directory synced"
     fi
@@ -55,16 +55,16 @@ clone_repository() {
     
     # Setup GitHub CLI authentication
     if [ -n "$GITHUB_TOKEN" ]; then
-        echo "$GITHUB_TOKEN" | gh auth login --with-token 2>&1 | tee -a "$LOG_FILE"
-        gh auth setup-git 2>&1 | tee -a "$LOG_FILE"
+        echo "$GITHUB_TOKEN" | gh auth login --with-token 2>&1 >> "$LOG_FILE"
+        gh auth setup-git 2>&1 >> "$LOG_FILE"
         log_message "Configured GitHub CLI authentication"
     fi
     
     cd /workspace
     if [ -n "$GITHUB_TOKEN" ]; then
-        git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_FULL_NAME}.git" repo 2>&1 | tee -a "$LOG_FILE"
+        git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_FULL_NAME}.git" repo 2>&1 >> "$LOG_FILE"
     else
-        git clone "https://github.com/${REPO_FULL_NAME}.git" repo 2>&1 | tee -a "$LOG_FILE"
+        git clone "https://github.com/${REPO_FULL_NAME}.git" repo 2>&1 >> "$LOG_FILE"
     fi
     
     # Fix ownership so Claude (running as node user) can write to the repository
@@ -79,8 +79,8 @@ clone_repository() {
     
     if [ "$IS_PULL_REQUEST" = "true" ] && [ -n "$BRANCH_NAME" ]; then
         log_message "Checking out PR branch: $BRANCH_NAME"
-        git fetch origin "$BRANCH_NAME" 2>&1 | tee -a "$LOG_FILE"
-        git checkout "$BRANCH_NAME" 2>&1 | tee -a "$LOG_FILE"
+        git fetch origin "$BRANCH_NAME" 2>&1 >> "$LOG_FILE"
+        git checkout "$BRANCH_NAME" 2>&1 >> "$LOG_FILE"
     else
         log_message "Using main branch"
     fi
@@ -107,25 +107,16 @@ run_claude() {
     fi
     
     # Build the full Claude command
-    CLAUDE_CMD="/usr/local/share/npm-global/bin/claude --allowedTools \"${ALLOWED_TOOLS}\" --verbose"
+    CLAUDE_CMD="/usr/local/share/npm-global/bin/claude --allowedTools \"${ALLOWED_TOOLS}\""
     
-    # Run Claude and capture ALL output (stdout, stderr, and tool usage)
+    # Run Claude and capture ALL output for logging
     log_message "========== CLAUDE OUTPUT START =========="
     
-    # Use script command to capture full terminal output including colors and tool usage
-    # Using --print flag for non-interactive execution with all environment variables
-    script -q -c "sudo -u node -E env \
-        HOME=/workspace \
-        CLAUDE_HOME=/workspace/.claude \
-        PATH=\"/usr/local/bin:/usr/local/share/npm-global/bin:\$PATH\" \
-        ANTHROPIC_API_KEY=\"\${ANTHROPIC_API_KEY}\" \
-        GH_TOKEN=\"\${GITHUB_TOKEN}\" \
-        GITHUB_TOKEN=\"\${GITHUB_TOKEN}\" \
-        BASH_DEFAULT_TIMEOUT_MS=\"\${BASH_DEFAULT_TIMEOUT_MS}\" \
-        BASH_MAX_TIMEOUT_MS=\"\${BASH_MAX_TIMEOUT_MS}\" \
-        $CLAUDE_CMD --print \"\$COMMAND\"" "$LOG_FILE.raw" 2>&1
+    # Create temporary files for processing
+    FULL_OUTPUT="/tmp/claude_full_$$.txt"
+    RESPONSE_FILE="/tmp/claude_response_$$.txt"
     
-    # Also capture with regular output for processing
+    # Run Claude and capture everything
     sudo -u node -E env \
         HOME=/workspace \
         CLAUDE_HOME=/workspace/.claude \
@@ -135,14 +126,36 @@ run_claude() {
         GITHUB_TOKEN="${GITHUB_TOKEN}" \
         BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS}" \
         BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS}" \
-        $CLAUDE_CMD --print "$COMMAND" 2>&1 | while IFS= read -r line; do
-        echo "$line" | tee -a "$LOG_FILE"
-        
-        # Detect and highlight tool usage
-        if echo "$line" | grep -q "Tool:"; then
-            echo ">>> TOOL USAGE: $line" >> "$LOG_FILE"
-        fi
-    done
+        $CLAUDE_CMD --print "$COMMAND" 2>&1 | tee "$FULL_OUTPUT"
+    
+    # Log the full output
+    cat "$FULL_OUTPUT" >> "$LOG_FILE"
+    
+    # Extract only Claude's response (everything after the last tool invocation)
+    # Claude Code with --print outputs the final response after all tool usage
+    # The response starts after lines that begin with "Tool:", "Using", etc.
+    
+    # Find the last line number that contains tool usage indicators
+    last_tool_line=$(grep -n "^Tool:\|^Using\|^Running\|^Executing" "$FULL_OUTPUT" 2>/dev/null | tail -1 | cut -d: -f1)
+    
+    if [ -n "$last_tool_line" ]; then
+        # Output everything after the last tool usage
+        tail -n +$((last_tool_line + 1)) "$FULL_OUTPUT" | grep -v "^$" > "$RESPONSE_FILE"
+    else
+        # No tools were used, so the entire output is the response
+        cat "$FULL_OUTPUT" > "$RESPONSE_FILE"
+    fi
+    
+    # Output the response to stdout (this goes to GitHub)
+    if [ -f "$RESPONSE_FILE" ] && [ -s "$RESPONSE_FILE" ]; then
+        cat "$RESPONSE_FILE"
+    else
+        # If no response was extracted, output the full output as fallback
+        cat "$FULL_OUTPUT"
+    fi
+    
+    # Clean up temporary files
+    rm -f "$FULL_OUTPUT" "$RESPONSE_FILE"
     
     log_message "========== CLAUDE OUTPUT END =========="
 }
@@ -154,17 +167,18 @@ run_claude() {
     run_claude
     
     log_message "Session completed"
-    echo ""
-    echo "=========================================="
-    echo "End Time: $(date)"
-    echo "Log saved to: $LOG_FILE"
-    echo "=========================================="
-} 2>&1 | tee -a "$LOG_FILE"
+    {
+        echo ""
+        echo "=========================================="
+        echo "End Time: $(date)"
+        echo "Log saved to: $LOG_FILE"
+        echo "=========================================="
+    } >> "$LOG_FILE"
+} 2>&1 >> "$LOG_FILE"
 
 # Copy log to persistent location if needed
 if [ -d "/home/daniel/claude-hub/logs/claude-sessions" ]; then
     cp "$LOG_FILE" "/home/daniel/claude-hub/logs/claude-sessions/" 2>/dev/null || true
 fi
 
-# Output summary for webhook
-echo "Session completed. Log: $LOG_FILE"
+# Don't output any summary to stdout - Claude's response has already been output
