@@ -17,10 +17,12 @@ services:
       - BOT_EMAIL=${BOT_EMAIL:-claude@example.com}
       - DEFAULT_GITHUB_OWNER=${DEFAULT_GITHUB_OWNER:-Cheffromspace}
       - DEFAULT_GITHUB_USER=${DEFAULT_GITHUB_USER:-Cheffromspace}
+      - DEFAULT_GITHUB_REPO=${DEFAULT_GITHUB_REPO}
       - DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
       - CLAUDE_USE_CONTAINERS=1
       - CLAUDE_CONTAINER_IMAGE=claudecode:latest
       - CLAUDE_AUTH_HOST_DIR=${CLAUDE_AUTH_HOST_DIR:-${HOME}/.claude-hub}
+      - HOST_LOGS_DIR=${PWD}/logs
       - DISABLE_LOG_REDACTION=true
       # Claude Code timeout settings for unattended mode
       - BASH_DEFAULT_TIMEOUT_MS=${BASH_DEFAULT_TIMEOUT_MS:-600000}  # 10 minutes default
@@ -36,6 +38,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
       - CLAUDE_WEBHOOK_SECRET=${CLAUDE_WEBHOOK_SECRET}
+      - SLACK_WEBHOOK_SECRET=${SLACK_WEBHOOK_SECRET}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3002}/health"]

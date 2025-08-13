@@ -95,7 +95,15 @@ export class WebhookProcessor {
       // Execute handlers
       const results = await this.executeHandlers(handlers, payload, context);
 
-      // Determine overall response
+      // Special handling for Slack webhooks
+      if (providerName === 'slack') {
+        // For Slack slash commands, return 200 OK immediately
+        // The handler will use response_url for delayed responses
+        res.status(200).send();
+        return;
+      }
+
+      // Determine overall response for other providers
       const hasErrors = results.some(r => !r.success);
       const statusCode = hasErrors ? 207 : 200; // 207 Multi-Status for partial success
 
