@@ -1,4 +1,38 @@
-# Claude GitHub Webhook
+# Claude GitHub Webhook - Personal Fork
+
+> **Note**: This is a personal fork maintained by [@grubbs](https://github.com/grubbs), an unaffiliated individual developer experimenting with the Claude Hub project. This fork includes additional features and modifications for personal use and experimentation.
+
+## Fork Features & Additions
+
+This fork adds the following capabilities to the original Claude Hub:
+
+### 📝 Enhanced Session Logging
+- **Full Claude session logs** saved to `/logs/claude-sessions/` directory
+- Each session creates a timestamped log file with complete tool usage and responses
+- Logs include repository operations, authentication setup, and Claude's decision-making process
+- Fixed issue where logs were being sent to GitHub comments (now only Claude's response is posted)
+
+### 💬 Slack Integration
+- **Native Slack webhook support** for triggering Claude from Slack
+- Two new slash commands:
+  - `/plan [idea]` - Turns ideas into comprehensive GitHub issues with design documents
+  - `/bug [description]` - Creates detailed bug reports with root cause analysis
+- Secure webhook signature verification for Slack requests
+- Automatic response posting back to Slack channels
+
+#### Slack Setup
+To enable Slack integration, add these environment variables:
+```bash
+SLACK_WEBHOOK_SECRET=your_slack_signing_secret  # From Slack app settings
+DEFAULT_GITHUB_OWNER=your-github-org            # Default GitHub organization
+DEFAULT_GITHUB_REPO=your-repo-name              # Default repository for issues
+```
+
+Configure your Slack app to send webhooks to: `https://your-domain.com/api/webhooks/slack`
+
+---
+
+## Original Project Information
 
 [![Discord](https://img.shields.io/discord/1377708770209304676?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.com/widget?id=1377708770209304676&theme=dark)
 [![Main Pipeline](https://github.com/claude-did-this/claude-hub/actions/workflows/main.yml/badge.svg)](https://github.com/claude-did-this/claude-hub/actions/workflows/main.yml)

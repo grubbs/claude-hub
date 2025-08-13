@@ -795,3 +795,54 @@ export async function managePRLabels({
     throw error;
   }
 }
+
+/**
+ * Creates a new GitHub issue
+ */
+export async function createIssue(
+  owner: string,
+  repo: string,
+  { title, body, labels = [] }: { title: string; body: string; labels?: string[] }
+): Promise<any> {
+  try {
+    // Validate parameters
+    const validated = validateGitHubParams(owner, repo, 1);
+
+    logger.info(
+      {
+        repo: `${owner}/${repo}`,
+        title,
+        labels
+      },
+      'Creating GitHub issue'
+    );
+
+    const client = getOctokit();
+    if (!client) {
+      throw new Error('GitHub client not configured');
+    }
+
+    // Create the issue
+    const { data } = await client.issues.create({
+      owner: validated.repoOwner,
+      repo: validated.repoName,
+      title,
+      body,
+      labels
+    });
+
+    logger.info(
+      {
+        repo: `${owner}/${repo}`,
+        issueNumber: data.number,
+        issueUrl: data.html_url
+      },
+      'Issue created successfully'
+    );
+
+    return data;
+  } catch (error) {
+    logger.error({ err: error, repo: `${owner}/${repo}` }, 'Failed to create GitHub issue');
+    throw error;
+  }
+}

@@ -42,6 +42,10 @@ class SecureCredentials {
       CLAUDE_WEBHOOK_SECRET: {
         file: process.env['CLAUDE_WEBHOOK_SECRET_FILE'] ?? '/run/secrets/claude_webhook_secret',
         env: 'CLAUDE_WEBHOOK_SECRET'
+      },
+      SLACK_WEBHOOK_SECRET: {
+        file: process.env['SLACK_WEBHOOK_SECRET_FILE'] ?? '/run/secrets/slack_webhook_secret',
+        env: 'SLACK_WEBHOOK_SECRET'
       }
     };
 
