@@ -392,7 +392,8 @@ function buildDockerArgs({
   }
 
   // Mount logs directory for session logging
-  const logsDir = path.resolve(process.cwd(), 'logs');
+  // When running inside Docker, we need to use the host path that's mounted to /logs in the webhook container
+  const logsDir = process.env.HOST_LOGS_DIR ?? '/logs';
   dockerArgs.push('-v', `${logsDir}:/logs`);
 
   // Add environment variables as separate arguments

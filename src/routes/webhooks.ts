@@ -19,6 +19,11 @@ if (process.env.NODE_ENV !== 'test') {
   import('../providers/claude').catch(err => {
     logger.error({ err }, 'Failed to initialize Claude provider');
   });
+
+  // Slack provider will be added in a future commit
+  // import('../providers/slack').catch(err => {
+  //   logger.error({ err }, 'Failed to initialize Slack provider');
+  // });
 }
 
 /**

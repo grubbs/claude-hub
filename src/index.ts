@@ -42,6 +42,10 @@ const generalRateLimit = rateLimit({
   message: {
     error: 'Too many requests',
     message: 'Too many requests from this IP, please try again later.'
+  },
+  skip: req => {
+    // Skip rate limiting for health check endpoint
+    return req.path === '/health';
   }
 });
 
@@ -53,9 +57,16 @@ const webhookRateLimit = rateLimit({
     error: 'Too many webhook requests',
     message: 'Too many webhook requests from this IP, please try again later.'
   },
-  skip: _req => {
+  skip: req => {
     // Skip rate limiting in test environment
-    return process.env['NODE_ENV'] === 'test';
+    if (process.env['NODE_ENV'] === 'test') {
+      return true;
+    }
+    // Skip rate limiting for health check endpoints
+    if (req.path === '/health' || req.path === '/api/webhooks/health') {
+      return true;
+    }
+    return false;
   }
 });
 
@@ -91,6 +102,16 @@ app.use(
   bodyParser.json({
     verify: (req: WebhookRequest, _res, buf) => {
       // Store the raw body buffer for webhook signature verification
+      req.rawBody = buf;
+    }
+  })
+);
+
+app.use(
+  bodyParser.urlencoded({
+    extended: true,
+    verify: (req: WebhookRequest, _res, buf) => {
+      // Store the raw body buffer for webhook signature verification (Slack uses URL-encoded)
       req.rawBody = buf;
     }
   })
