@@ -42,27 +42,7 @@ if ! docker images | grep -q "claude-setup"; then
     docker build -f "$PROJECT_ROOT/Dockerfile.claude-setup" -t claude-setup:latest "$PROJECT_ROOT" > /dev/null 2>&1
 fi
 
-# Function to perform a keep-alive operation
-perform_keep_alive() {
-    local operation=$1
-    
-    echo "Performing: $operation..."
-    log_message "Keep-alive operation: $operation"
-    
-    # For Claude Max auth, we just need to touch the files and verify they exist
-    # Actual Claude execution requires API key or interactive session
-    
-    if [ -f "$AUTH_DIR/.credentials.json" ]; then
-        # File exists - that's enough for keep-alive purposes
-        echo -e "${GREEN}✅ $operation completed successfully${NC}"
-        log_message "SUCCESS: $operation"
-        return 0
-    else
-        echo -e "${YELLOW}⚠️  $operation failed - credentials not found${NC}"
-        log_message "FAILED: $operation - No credentials file"
-        return 1
-    fi
-}
+# Removed perform_keep_alive function - now using direct Claude execution instead
 
 # Track success/failure
 SUCCESS_COUNT=0
@@ -73,17 +53,37 @@ echo ""
 echo "🔧 Performing keep-alive operations..."
 echo ""
 
-# 1. Validate credentials file
-if perform_keep_alive "Credentials validation"; then
+# 1. Execute actual Claude command to maintain session
+echo "Testing Claude session with simple command..."
+log_message "Executing Claude keep-alive command"
+
+# Create a temporary test file for Claude to read
+TEST_FILE="/tmp/claude-keepalive-test-$$"
+echo "Keep-alive test at $(date)" > "$TEST_FILE"
+
+# Run Claude with a simple command that uses the API
+if docker run --rm \
+    -v "${AUTH_DIR}:/home/node/.claude" \
+    -v "/tmp:/tmp" \
+    --network host \
+    claude-setup:latest \
+    sh -c "echo 'Testing session' | claude --no-interactive" > /dev/null 2>&1; then
+    
+    echo -e "${GREEN}✅ Claude session active - keep-alive successful${NC}"
+    log_message "SUCCESS: Claude session is active"
     ((SUCCESS_COUNT++))
 else
+    echo -e "${RED}❌ Claude session expired or unavailable${NC}"
+    log_message "FAILED: Claude session expired or unavailable"
     ((FAILURE_COUNT++))
 fi
 
-# 2. Check authentication age
-echo "Checking authentication age..."
+# Clean up test file
+rm -f "$TEST_FILE"
+
+# 2. Verify authentication files still exist
+echo "Verifying authentication files..."
 if [ -f "$AUTH_DIR/.credentials.json" ]; then
-    # Simple age check without complex stat parsing
     echo -e "${GREEN}✅ Authentication file exists${NC}"
     log_message "SUCCESS: Auth file exists"
     ((SUCCESS_COUNT++))

@@ -57,6 +57,55 @@ while true; do
     # Header - combined on one line
     echo -e "${W}═══ CLAUDE MONITOR ═══${N} $(date '+%H:%M:%S')"
     
+    # Authentication Status (compact)
+    echo -e "${W}AUTH:${N}"
+    AUTH_DIR="${CLAUDE_AUTH_HOST_DIR:-${HOME}/.claude-hub}"
+    if [ -f "$AUTH_DIR/.credentials.json" ]; then
+        FILE_TIMESTAMP=$(stat -c %Y "$AUTH_DIR/.credentials.json" 2>/dev/null || echo "0")
+        if [ "$FILE_TIMESTAMP" != "0" ]; then
+            CURRENT_TIME=$(date +%s)
+            AUTH_AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
+            AUTH_AGE_HOURS=$((AUTH_AGE / 3600))
+            AUTH_AGE_DAYS=$((AUTH_AGE / 86400))
+            
+            if [ $AUTH_AGE_DAYS -eq 0 ]; then
+                echo -e " ${G}● ${AUTH_AGE_HOURS}h old${N}"
+            elif [ $AUTH_AGE_DAYS -lt 7 ]; then
+                echo -e " ${G}● ${AUTH_AGE_DAYS}d old${N}"
+            elif [ $AUTH_AGE_DAYS -lt 14 ]; then
+                echo -e " ${Y}● ${AUTH_AGE_DAYS}d (aging)${N}"
+            else
+                echo -e " ${R}● ${AUTH_AGE_DAYS}d (expired!)${N}"
+            fi
+        fi
+    else
+        echo -e " ${R}● No auth${N}"
+    fi
+    
+    # Show last keep-alive run
+    KEEPALIVE_LOG="/home/daniel/claude-hub/logs/claude-keep-alive.log"
+    if [ -f "$KEEPALIVE_LOG" ]; then
+        # Get last timestamp from log
+        LAST_RUN=$(tail -1 "$KEEPALIVE_LOG" 2>/dev/null | grep -oE '\[20[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\]' | tr -d '[]' | head -1)
+        if [ -n "$LAST_RUN" ]; then
+            # Convert to epoch
+            LAST_EPOCH=$(date -d "$LAST_RUN" +%s 2>/dev/null || echo "0")
+            if [ "$LAST_EPOCH" != "0" ]; then
+                CURRENT_TIME=$(date +%s)
+                TIME_DIFF=$((CURRENT_TIME - LAST_EPOCH))
+                if [ $TIME_DIFF -lt 3600 ]; then
+                    MINS=$((TIME_DIFF / 60))
+                    echo -e " ${C}↻${N} ${MINS}m ago"
+                elif [ $TIME_DIFF -lt 86400 ]; then
+                    HOURS=$((TIME_DIFF / 3600))
+                    echo -e " ${C}↻${N} ${HOURS}h ago"
+                else
+                    echo -e " ${Y}↻${N} >24h ago"
+                fi
+            fi
+        fi
+    fi
+    
     # Webhook Status
     echo -e "${W}WEBHOOK:${N}"
     # More robust webhook detection - check multiple ways
@@ -83,7 +132,8 @@ while true; do
     
     # Claude Status
     echo -e "${W}CLAUDE:${N}"
-    claude_containers=$(docker_cmd ps --format "{{.Names}}" 2>/dev/null | grep "claude-.*-rail" 2>/dev/null || true)
+    # Show ALL Claude containers, not just -rail
+    claude_containers=$(docker_cmd ps --format "{{.Names}}" 2>/dev/null | grep "^claude-" | grep -v "webhook" 2>/dev/null || true)
     if [ -n "$claude_containers" ]; then
         claude_count=$(echo "$claude_containers" | wc -l)
     else
@@ -95,16 +145,29 @@ while true; do
         # Show container names (abbreviated)
         echo "$claude_containers" | while read container; do
             [ -z "$container" ] && continue
-            # Extract repo and issue number
-            repo=$(echo $container | cut -d'-' -f2)
-            issue=$(echo $container | grep -oE "rail-[0-9]+" | cut -d'-' -f2)
+            # Extract repo and issue number (works for both rail and hub)
+            if echo "$container" | grep -q "rail"; then
+                repo="rail"
+                issue=$(echo $container | grep -oE "rail-[0-9]+" | cut -d'-' -f2)
+            elif echo "$container" | grep -q "hub"; then
+                repo="hub"
+                issue=$(echo $container | grep -oE "hub-[0-9]+" | cut -d'-' -f2)
+            else
+                # Generic format: claude-<hash>
+                repo="claude"
+                issue=""
+            fi
             
             # Get basic stats
             stats=$(docker_cmd stats --no-stream "$container" 2>/dev/null | tail -1)
             if [ ! -z "$stats" ]; then
                 cpu=$(echo "$stats" | awk '{print $3}')
                 mem=$(echo "$stats" | awk '{print $7}')
-                echo -e " ${C}→${N} $repo #$issue"
+                if [ -n "$issue" ]; then
+                    echo -e " ${C}→${N} $repo #$issue"
+                else
+                    echo -e " ${C}→${N} $container"
+                fi
                 echo "   CPU:$cpu MEM:$mem"
             fi
         done
