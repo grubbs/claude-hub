@@ -9,6 +9,7 @@ import {
   managePRLabels,
   getPullRequestDetails
 } from '../services/githubService';
+import { slackNotificationService } from '../services/slackNotificationService';
 import { createLogger } from '../utils/logger';
 import { sanitizeBotMentions } from '../utils/sanitize';
 import secureCredentials from '../utils/secureCredentials';
@@ -205,6 +206,16 @@ async function handleIssueOpened(
     'Processing new issue for auto-tagging'
   );
 
+  const startTime = Date.now();
+  const taskContext = {
+    repoFullName: repo.full_name,
+    issueNumber: issue.number,
+    type: 'auto_tag' as const,
+    user: issue.user.login,
+    command: 'Auto-tagging',
+    startTime
+  };
+
   try {
     // Process the issue with Claude for automatic tagging using CLI-based approach
     const tagCommand = `Analyze this GitHub issue and apply appropriate labels using GitHub CLI commands.
@@ -225,6 +236,9 @@ Instructions:
 4. Do NOT comment on the issue - only apply labels silently
 
 Complete the auto-tagging task using only GitHub CLI commands.`;
+
+    // Send start notification if enabled
+    await slackNotificationService.notifyTaskStart(taskContext);
 
     logger.info('Sending issue to Claude for CLI-based auto-tagging');
     const claudeResponse = await processCommand({
@@ -270,6 +284,14 @@ Complete the auto-tagging task using only GitHub CLI commands.`;
       );
     }
 
+    // Send success notification
+    await slackNotificationService.notifyTaskComplete(taskContext, {
+      success: true,
+      responsePreview: 'Auto-tagging completed',
+      githubUrl: `https://github.com/${repo.full_name}/issues/${issue.number}`,
+      duration: Date.now() - startTime
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Issue auto-tagged successfully',
@@ -280,6 +302,9 @@ Complete the auto-tagging task using only GitHub CLI commands.`;
       }
     });
   } catch (error) {
+    // Send error notification
+    await slackNotificationService.notifyTaskError(taskContext, error as Error);
+    
     const err = error as Error;
     logger.error(
       {
@@ -391,6 +416,20 @@ async function handlePullRequestComment(
         return await handleManualPRReview(pr, repo, payload.sender, res);
       }
 
+      const startTime = Date.now();
+      const taskContext = {
+        repoFullName: repo.full_name,
+        pullRequestNumber: pr.number,
+        type: 'pull_request_comment' as const,
+        user: payload.sender.login,
+        command: command,
+        startTime,
+        branchName: pr.head.ref
+      };
+
+      // Send start notification if enabled
+      await slackNotificationService.notifyTaskStart(taskContext);
+
       try {
         // Process the command with Claude
         logger.info('Sending command to Claude service');
@@ -400,6 +439,14 @@ async function handlePullRequestComment(
           command: command,
           isPullRequest: true,
           branchName: pr.head.ref
+        });
+
+        // Send success notification
+        await slackNotificationService.notifyTaskComplete(taskContext, {
+          success: true,
+          responsePreview: claudeResponse.substring(0, 500),
+          githubUrl: `https://github.com/${repo.full_name}/pull/${pr.number}`,
+          duration: Date.now() - startTime
         });
 
         // Return Claude's response in the webhook response
@@ -417,6 +464,9 @@ async function handlePullRequestComment(
           }
         });
       } catch (error) {
+        // Send error notification
+        await slackNotificationService.notifyTaskError(taskContext, error as Error);
+        
         return handleCommandError(error, { repo, issue: { number: pr.number }, command }, res);
       }
     }
@@ -539,6 +589,19 @@ async function processBotMention(
       }
     }
 
+    const startTime = Date.now();
+    const taskContext = {
+      repoFullName: repo.full_name,
+      issueNumber: issue.number,
+      type: 'issue_comment' as const,
+      user: comment.user.login,
+      command: command,
+      startTime
+    };
+
+    // Send start notification if enabled
+    await slackNotificationService.notifyTaskStart(taskContext);
+
     try {
       // Process the command with Claude
       logger.info('Sending command to Claude service');
@@ -559,6 +622,14 @@ async function processBotMention(
         body: claudeResponse
       });
 
+      // Send success notification
+      await slackNotificationService.notifyTaskComplete(taskContext, {
+        success: true,
+        responsePreview: claudeResponse.substring(0, 500),
+        githubUrl: `https://github.com/${repo.full_name}/issues/${issue.number}`,
+        duration: Date.now() - startTime
+      });
+
       // Return success in the webhook response
       logger.info('Claude response posted successfully');
 
@@ -572,6 +643,9 @@ async function processBotMention(
         }
       });
     } catch (error) {
+      // Send error notification
+      await slackNotificationService.notifyTaskError(taskContext, error as Error);
+      
       return handleCommandError(error, { repo, issue, command }, res);
     }
   }
@@ -665,26 +739,54 @@ async function handleManualPRReview(
     // Create the PR review prompt
     const prReviewPrompt = createPRReviewPrompt(pr.number, repo.full_name, pr.head.sha);
 
-    // Process the PR review with Claude
-    logger.info('Sending PR for manual Claude review');
-    const claudeResponse = await processCommand({
+    const startTime = Date.now();
+    const taskContext = {
       repoFullName: repo.full_name,
-      issueNumber: pr.number,
-      command: prReviewPrompt,
-      isPullRequest: true,
-      branchName: pr.head.ref,
-      operationType: 'manual-pr-review'
-    });
+      pullRequestNumber: pr.number,
+      type: 'pr_review' as const,
+      user: sender.login,
+      command: 'Manual PR Review',
+      startTime,
+      branchName: pr.head.ref
+    };
 
-    logger.info(
-      {
-        repo: repo.full_name,
-        pr: pr.number,
-        sender: sender.login,
-        responseLength: claudeResponse ? claudeResponse.length : 0
-      },
-      'Manual PR review completed successfully'
-    );
+    // Send start notification if enabled
+    await slackNotificationService.notifyTaskStart(taskContext);
+
+    try {
+      // Process the PR review with Claude
+      logger.info('Sending PR for manual Claude review');
+      const claudeResponse = await processCommand({
+        repoFullName: repo.full_name,
+        issueNumber: pr.number,
+        command: prReviewPrompt,
+        isPullRequest: true,
+        branchName: pr.head.ref,
+        operationType: 'manual-pr-review'
+      });
+
+      // Send success notification
+      await slackNotificationService.notifyTaskComplete(taskContext, {
+        success: true,
+        responsePreview: claudeResponse ? claudeResponse.substring(0, 500) : 'Review completed',
+        githubUrl: `https://github.com/${repo.full_name}/pull/${pr.number}`,
+        duration: Date.now() - startTime
+      });
+
+      logger.info(
+        {
+          repo: repo.full_name,
+          pr: pr.number,
+          sender: sender.login,
+          responseLength: claudeResponse ? claudeResponse.length : 0
+        },
+        'Manual PR review completed successfully'
+      );
+    } catch (error) {
+      // Send error notification
+      await slackNotificationService.notifyTaskError(taskContext, error as Error);
+      throw error; // Re-throw to be handled by existing error handling
+    }
 
     // Update label to show review is complete
     try {
@@ -1069,81 +1171,120 @@ async function processAutomatedPRReviews(
         // Create the PR review prompt
         const prReviewPrompt = createPRReviewPrompt(pr.number, repo.full_name, commitSha);
 
-        // Process the PR review with Claude
-        logger.info('Sending PR for automated Claude review');
-        const claudeResponse = await processCommand({
+        const startTime = Date.now();
+        const taskContext = {
           repoFullName: repo.full_name,
-          issueNumber: pr.number,
-          command: prReviewPrompt,
-          isPullRequest: true,
-          branchName: pr.head.ref,
-          operationType: 'pr-review'
-        });
+          pullRequestNumber: pr.number,
+          type: 'check_suite' as const,
+          user: checkSuite.app?.name ?? 'GitHub Actions',
+          command: 'Automated PR Review (checks passed)',
+          startTime,
+          branchName: pr.head.ref
+        };
 
-        logger.info(
-          {
-            repo: repo.full_name,
-            pr: pr.number,
-            responseLength: claudeResponse ? claudeResponse.length : 0
-          },
-          'Automated PR review completed successfully'
-        );
+        // Send start notification if enabled
+        await slackNotificationService.notifyTaskStart(taskContext);
 
-        // Update label to show review is complete
         try {
-          await managePRLabels({
-            repoOwner: repo.owner.login,
-            repoName: repo.name,
-            prNumber: pr.number,
-            labelsToAdd: ['claude-review-complete'],
-            labelsToRemove: ['claude-review-in-progress', 'claude-review-needed']
+          // Process the PR review with Claude
+          logger.info('Sending PR for automated Claude review');
+          const claudeResponse = await processCommand({
+            repoFullName: repo.full_name,
+            issueNumber: pr.number,
+            command: prReviewPrompt,
+            isPullRequest: true,
+            branchName: pr.head.ref,
+            operationType: 'pr-review'
           });
-        } catch (labelError) {
+
+          // Send success notification
+          await slackNotificationService.notifyTaskComplete(taskContext, {
+            success: true,
+            responsePreview: claudeResponse ? claudeResponse.substring(0, 500) : 'Automated review completed',
+            githubUrl: `https://github.com/${repo.full_name}/pull/${pr.number}`,
+            duration: Date.now() - startTime
+          });
+
+          logger.info(
+            {
+              repo: repo.full_name,
+              pr: pr.number,
+              responseLength: claudeResponse ? claudeResponse.length : 0
+            },
+            'Automated PR review completed successfully'
+          );
+
+          // Update label to show review is complete
+          try {
+            await managePRLabels({
+              repoOwner: repo.owner.login,
+              repoName: repo.name,
+              prNumber: pr.number,
+              labelsToAdd: ['claude-review-complete'],
+              labelsToRemove: ['claude-review-in-progress', 'claude-review-needed']
+            });
+          } catch (labelError) {
+            logger.error(
+              {
+                err: (labelError as Error).message,
+                repo: repo.full_name,
+                pr: pr.number
+              },
+              'Failed to update review-complete label'
+            );
+            // Don't fail the review if label update fails
+          }
+
+          prResult.success = true;
+          return prResult;
+        } catch (reviewError) {
+          // Send error notification
+          await slackNotificationService.notifyTaskError(taskContext, reviewError as Error);
+          
           logger.error(
             {
-              err: (labelError as Error).message,
+              errorMessage: (reviewError as Error).message || 'Unknown error',
+              errorType: (reviewError as Error).constructor.name,
               repo: repo.full_name,
-              pr: pr.number
+              pr: pr.number,
+              checkSuite: checkSuite.id
             },
-            'Failed to update review-complete label'
+            'Error processing automated PR review'
           );
-          // Don't fail the review if label update fails
-        }
 
-        prResult.success = true;
-        return prResult;
-      } catch (reviewError) {
+          // Remove in-progress label on error
+          try {
+            await managePRLabels({
+              repoOwner: repo.owner.login,
+              repoName: repo.name,
+              prNumber: pr.number,
+              labelsToRemove: ['claude-review-in-progress']
+            });
+          } catch (labelError) {
+            logger.error(
+              {
+                err: (labelError as Error).message,
+                repo: repo.full_name,
+                pr: pr.number
+              },
+              'Failed to remove review-in-progress label after error'
+            );
+          }
+
+          prResult.error = (reviewError as Error).message || 'Unknown error during review';
+          return prResult;
+        }
+      } catch (unexpectedError) {
+        // Handle any unexpected errors
         logger.error(
           {
-            errorMessage: (reviewError as Error).message || 'Unknown error',
-            errorType: (reviewError as Error).constructor.name,
+            err: (unexpectedError as Error).message,
             repo: repo.full_name,
-            pr: pr.number,
-            checkSuite: checkSuite.id
+            pr: pr.number
           },
-          'Error processing automated PR review'
+          'Unexpected error in PR processing'
         );
-
-        // Remove in-progress label on error
-        try {
-          await managePRLabels({
-            repoOwner: repo.owner.login,
-            repoName: repo.name,
-            prNumber: pr.number,
-            labelsToRemove: ['claude-review-in-progress']
-          });
-        } catch (labelError) {
-          logger.error(
-            {
-              err: (labelError as Error).message,
-              repo: repo.full_name,
-              pr: pr.number
-            },
-            'Failed to remove review-in-progress label after error'
-          );
-        }
-
-        prResult.error = (reviewError as Error).message || 'Unknown error during review';
+        prResult.error = (unexpectedError as Error).message || 'Unexpected error';
         return prResult;
       }
     });
@@ -1717,3 +1858,4 @@ function handleWebhookError(
     timestamp: timestamp
   });
 }
+
