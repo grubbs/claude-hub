@@ -2,6 +2,7 @@ import { webhookRegistry } from '../../core/webhook/WebhookRegistry';
 import { slackWebhookProvider } from './SlackWebhookProvider';
 import { planHandler } from './handlers/PlanHandler';
 import { bugHandler } from './handlers/BugHandler';
+import { testHandler } from './handlers/TestHandler';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('SlackProvider');
@@ -24,5 +25,12 @@ webhookRegistry.registerHandler('slack', {
   canHandle: bugHandler.canHandle.bind(bugHandler)
 });
 logger.info('Registered handler for /bug command');
+
+webhookRegistry.registerHandler('slack', {
+  event: 'slash_command:/test',
+  handle: testHandler.handle.bind(testHandler),
+  canHandle: testHandler.canHandle.bind(testHandler)
+});
+logger.info('Registered handler for /test command');
 
 export { slackWebhookProvider };

@@ -46,15 +46,31 @@ export class PlanHandler {
         text: `🤔 Processing your idea: "${text}"\nI'll create a detailed GitHub issue with a design document...`
       });
 
-      // Get repository info from environment or default
-      const owner = process.env.DEFAULT_GITHUB_OWNER ?? 'claude-did-this';
-      const repo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
+      // Parse repository from text if it starts with owner/repo format
+      let owner: string;
+      let repo: string;
+      let ideaText = text;
+
+      // Check if text starts with a repository path (owner/repo format)
+      const repoMatch = text.match(/^([\w-]+)\/([\w-]+)\s+(.*)/);
+
+      if (repoMatch) {
+        // Use the repository from the text
+        owner = repoMatch[1];
+        repo = repoMatch[2];
+        ideaText = repoMatch[3];
+        logger.info(`Using repository from text: ${owner}/${repo}`);
+      } else {
+        // Use default repository from environment
+        owner = process.env.DEFAULT_GITHUB_OWNER ?? 'claude-did-this';
+        repo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
+      }
 
       // Create prompt for Claude to generate a detailed design document
       const claudePrompt = `You are a senior software architect creating a detailed design document for a new feature idea.
 
 User ${user_name} from ${channel_name} channel has submitted the following idea:
-"${text}"
+"${ideaText}"
 
 Please create a comprehensive GitHub issue that includes:
 
@@ -94,7 +110,7 @@ End with a section of specific questions for the product owner to help refine re
       // Create GitHub issue
       const issue = await createIssue(owner, repo, {
         title,
-        body: `## Submitted via Slack by @${user_name}\n\n**Original Idea:** ${text}\n\n---\n\n${designDoc}`,
+        body: `## Submitted via Slack by @${user_name}\n\n**Original Idea:** ${ideaText}\n\n---\n\n${designDoc}`,
         labels: ['enhancement', 'design-document', 'needs-review']
       });
 
