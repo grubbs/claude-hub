@@ -291,9 +291,12 @@ Complete the auto-tagging task using only the minimal required tools.`;
 - Current Branch: ${branchName ?? 'main'}
 - Running in: Unattended mode
 
+**CRITICAL: You MUST work on ${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} ONLY. Do NOT reference or work on any other issue or PR number.**
+
 **Important Instructions:**
-1. You have full GitHub CLI access via the 'gh' command
-2. When writing code:
+1. FIRST: Verify you're working on the correct issue by running: gh ${isPullRequest ? 'pr' : 'issue'} view ${issueNumber}
+2. You have full GitHub CLI access via the 'gh' command
+3. When writing code:
    - Always create a feature branch for new work
    - Make commits with descriptive messages
    - Push your work to the remote repository
@@ -317,6 +320,8 @@ Complete the auto-tagging task using only the minimal required tools.`;
 
 **User Request:**
 ${command}
+
+**REMINDER: You are working on ${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} ONLY. Do not reference or work on any other PR or issue numbers.**
 
 Please complete this task fully and autonomously.`;
   }
