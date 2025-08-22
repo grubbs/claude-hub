@@ -295,6 +295,9 @@ Complete the auto-tagging task using only the minimal required tools.`;
 
 **Important Instructions:**
 1. FIRST: Verify you're working on the correct issue by running: gh ${isPullRequest ? 'pr' : 'issue'} view ${issueNumber}
+   - If this command fails or the ${isPullRequest ? 'PR' : 'issue'} doesn't exist, STOP immediately
+   - DO NOT work on any other ${isPullRequest ? 'PR' : 'issue'} as a fallback
+   - Report the error: "${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} not found or inaccessible"
 2. You have full GitHub CLI access via the 'gh' command
 3. When writing code:
    - Always create a feature branch for new work
@@ -322,6 +325,12 @@ Complete the auto-tagging task using only the minimal required tools.`;
 ${command}
 
 **REMINDER: You are working on ${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} ONLY. Do not reference or work on any other PR or issue numbers.**
+
+**CRITICAL ERROR HANDLING:**
+- If ${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} cannot be accessed, you MUST report the error
+- NEVER fall back to working on a different ${isPullRequest ? 'PR' : 'issue'}
+- NEVER say "Since I cannot access X, I'll work on Y instead"
+- If you cannot complete the requested task, explain why and stop
 
 Please complete this task fully and autonomously.`;
   }
