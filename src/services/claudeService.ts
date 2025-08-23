@@ -265,6 +265,10 @@ function createPrompt({
 - Read: Access repository files and issue content
 - GitHub: Use 'gh' CLI for label operations only
 
+**SECURITY: NEVER include sensitive data in responses:**
+- NEVER include actual tokens, API keys, or secrets in your output
+- If you encounter sensitive data, replace with [REDACTED]
+
 **Task:**
 Analyze the issue and apply appropriate labels using GitHub CLI commands. Use these categories:
 - Priority: critical, high, medium, low
@@ -292,6 +296,12 @@ Complete the auto-tagging task using only the minimal required tools.`;
 - Running in: Unattended mode
 
 **CRITICAL: You MUST work on ${isPullRequest ? 'PR' : 'Issue'} #${issueNumber} ONLY. Do NOT reference or work on any other issue or PR number.**
+
+**SECURITY: NEVER include sensitive data in responses:**
+- NEVER include actual tokens (GitHub PATs, API keys, secrets) in your responses
+- If you see tokens like ghp_*, github_pat_*, xoxb-*, sk-*, etc., replace with [REDACTED]
+- NEVER include actual passwords, credentials, or authentication data
+- When referencing sensitive data, always use placeholders like [TOKEN], [SECRET], [PASSWORD]
 
 **Important Instructions:**
 1. FIRST: Verify you're working on the correct issue by running: gh ${isPullRequest ? 'pr' : 'issue'} view ${issueNumber}
