@@ -1,6 +1,7 @@
 import type { WebhookContext, WebhookHandlerResponse } from '../../../types/webhook';
 import type { SlackWebhookPayload } from '../SlackWebhookProvider';
 import { createLogger } from '../../../utils/logger';
+import { parseRepositoryFromText } from '../../../utils/repositoryParser';
 import { createIssue } from '../../../services/githubService';
 import { processCommand } from '../../../services/claudeService';
 import axios from 'axios';
@@ -46,15 +47,15 @@ export class PlanHandler {
         text: `🤔 Processing your idea: "${text}"\nI'll create a detailed GitHub issue with a design document...`
       });
 
-      // Get repository info from environment or default
-      const owner = process.env.DEFAULT_GITHUB_OWNER ?? 'claude-did-this';
-      const repo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
+      // Parse repository from text
+      const parsed = parseRepositoryFromText(text);
+      const { owner, repo, remainingText: ideaText } = parsed;
 
       // Create prompt for Claude to generate a detailed design document
       const claudePrompt = `You are a senior software architect creating a detailed design document for a new feature idea.
 
 User ${user_name} from ${channel_name} channel has submitted the following idea:
-"${text}"
+"${ideaText}"
 
 Please create a comprehensive GitHub issue that includes:
 
@@ -94,7 +95,7 @@ End with a section of specific questions for the product owner to help refine re
       // Create GitHub issue
       const issue = await createIssue(owner, repo, {
         title,
-        body: `## Submitted via Slack by @${user_name}\n\n**Original Idea:** ${text}\n\n---\n\n${designDoc}`,
+        body: `## Submitted via Slack by @${user_name}\n\n**Original Idea:** ${ideaText}\n\n---\n\n${designDoc}`,
         labels: ['enhancement', 'design-document', 'needs-review']
       });
 

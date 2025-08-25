@@ -1,6 +1,7 @@
 import type { WebhookContext, WebhookHandlerResponse } from '../../../types/webhook';
 import type { SlackWebhookPayload } from '../SlackWebhookProvider';
 import { createLogger } from '../../../utils/logger';
+import { parseRepositoryFromText } from '../../../utils/repositoryParser';
 import { createIssue } from '../../../services/githubService';
 import { processCommand } from '../../../services/claudeService';
 import axios from 'axios';
@@ -46,15 +47,15 @@ export class BugHandler {
         text: `🔍 Analyzing bug report: "${text}"\nI'll create a detailed root cause analysis and solution design...`
       });
 
-      // Get repository info from environment or default
-      const owner = process.env.DEFAULT_GITHUB_OWNER ?? 'claude-did-this';
-      const repo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
+      // Parse repository from text
+      const parsed = parseRepositoryFromText(text);
+      const { owner, repo, remainingText: bugText } = parsed;
 
       // Create prompt for Claude to generate root cause analysis and solution
       const claudePrompt = `You are a senior software engineer performing root cause analysis and solution design for a bug report.
 
 User ${user_name} from ${channel_name} channel has reported the following bug:
-"${text}"
+"${bugText}"
 
 Please create a comprehensive GitHub issue that includes:
 
@@ -168,7 +169,7 @@ If you need more information to properly diagnose, list those questions clearly.
       // Create GitHub issue
       const issue = await createIssue(owner, repo, {
         title,
-        body: `## Reported via Slack by @${user_name}\n\n**Original Report:** ${text}\n\n---\n\n${analysis}`,
+        body: `## Reported via Slack by @${user_name}\n\n**Original Report:** ${bugText}\n\n---\n\n${analysis}`,
         labels: ['bug', 'needs-triage', 'root-cause-analysis']
       });
 
