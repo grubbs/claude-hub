@@ -1,6 +1,7 @@
 import type { WebhookContext, WebhookHandlerResponse } from '../../../types/webhook';
 import type { SlackWebhookPayload } from '../SlackWebhookProvider';
 import { createLogger } from '../../../utils/logger';
+import { parseRepositoryFromText } from '../../../utils/repositoryParser';
 import { processCommand } from '../../../services/claudeService';
 import axios from 'axios';
 
@@ -30,46 +31,28 @@ export class TestHandler {
     const { text, response_url, user_name, channel_name } = payload.data;
 
     try {
-      // Parse repository from text if it contains owner/repo format
-      let repoFullName: string;
-      let commandText = text?.trim() ?? '';
+      // Parse repository from text
+      const inputText = text?.trim() ?? '';
+      const parsed = parseRepositoryFromText(inputText);
+      const { owner, repo, remainingText } = parsed;
 
-      // Check if text contains a repository path (owner/repo format)
-      const repoMatch = commandText.match(/^([\w-]+\/[\w-]+)\s*(.*)/);
-
-      if (repoMatch) {
-        // Use the repository from the text
-        repoFullName = repoMatch[1];
-        commandText = repoMatch[2] ?? 'webhook test acknowledgment';
-        logger.info(`Using repository from text: ${repoFullName}`);
-      } else {
-        // Use default repository from environment
-        const defaultRepo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
-
-        // Check if DEFAULT_GITHUB_REPO already contains owner/repo format
-        if (defaultRepo.includes('/')) {
-          // It's already a full path, use it directly
-          repoFullName = defaultRepo;
-        } else {
-          // It's just a repo name, use DEFAULT_GITHUB_OWNER
-          const owner = process.env.DEFAULT_GITHUB_OWNER;
-
-          if (!owner) {
-            await this.respondToSlack(response_url, {
-              text: '❌ DEFAULT_GITHUB_OWNER not configured. Please specify repository as: `/test owner/repo [command]`'
-            });
-            return {
-              success: false,
-              error: 'DEFAULT_GITHUB_OWNER not configured'
-            };
-          }
-
-          repoFullName = `${owner}/${defaultRepo}`;
-        }
-
-        commandText = commandText ?? 'webhook test acknowledgment';
-        logger.info(`Using default repository: ${repoFullName}`);
+      // Check if we have a valid owner (for backward compatibility with error message)
+      if (
+        !parsed.isExplicit &&
+        !process.env.DEFAULT_GITHUB_OWNER &&
+        !process.env.DEFAULT_GITHUB_REPO?.includes('/')
+      ) {
+        await this.respondToSlack(response_url, {
+          text: '❌ DEFAULT_GITHUB_OWNER not configured. Please specify repository as: `/test owner/repo [command]`'
+        });
+        return {
+          success: false,
+          error: 'DEFAULT_GITHUB_OWNER not configured'
+        };
       }
+
+      const repoFullName = `${owner}/${repo}`;
+      const commandText = remainingText || 'webhook test acknowledgment';
 
       // Send immediate acknowledgment to Slack
       await this.respondToSlack(response_url, {

@@ -1,6 +1,7 @@
 import type { WebhookContext, WebhookHandlerResponse } from '../../../types/webhook';
 import type { SlackWebhookPayload } from '../SlackWebhookProvider';
 import { createLogger } from '../../../utils/logger';
+import { parseRepositoryFromText } from '../../../utils/repositoryParser';
 import { createIssue } from '../../../services/githubService';
 import { processCommand } from '../../../services/claudeService';
 import axios from 'axios';
@@ -46,37 +47,9 @@ export class BugHandler {
         text: `🔍 Analyzing bug report: "${text}"\nI'll create a detailed root cause analysis and solution design...`
       });
 
-      // Parse repository from text if it starts with owner/repo format
-      let owner: string;
-      let repo: string;
-      let bugText = text;
-
-      // Check if text starts with a repository path (owner/repo format)
-      // Match owner/repo where both can contain letters, numbers, hyphens, underscores, and dots
-      const repoMatch = text.match(/^([\w.-]+)\/([\w.-]+)\s+(.*)/);
-
-      if (repoMatch) {
-        // Use the repository from the text
-        owner = repoMatch[1];
-        repo = repoMatch[2];
-        bugText = repoMatch[3];
-        logger.info(`Using repository from text: ${owner}/${repo}`);
-      } else {
-        // Use default repository from environment
-        const defaultRepo = process.env.DEFAULT_GITHUB_REPO ?? 'demo-repository';
-
-        // Check if DEFAULT_GITHUB_REPO already contains owner/repo format
-        if (defaultRepo.includes('/')) {
-          // It's already a full path, split it
-          const parts = defaultRepo.split('/');
-          owner = parts[0];
-          repo = parts.slice(1).join('/'); // Handle cases with multiple slashes
-        } else {
-          // It's just a repo name, use DEFAULT_GITHUB_OWNER
-          owner = process.env.DEFAULT_GITHUB_OWNER ?? 'claude-did-this';
-          repo = defaultRepo;
-        }
-      }
+      // Parse repository from text
+      const parsed = parseRepositoryFromText(text);
+      const { owner, repo, remainingText: bugText } = parsed;
 
       // Create prompt for Claude to generate root cause analysis and solution
       const claudePrompt = `You are a senior software engineer performing root cause analysis and solution design for a bug report.
