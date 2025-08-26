@@ -159,21 +159,25 @@ run_claude() {
     rm -f "$FULL_OUTPUT" "$RESPONSE_FILE"
 }
 
-# Main execution flow with logging
+# Main execution flow with selective logging
+# Run setup and auth (redirect to log file only)
 {
     setup_claude_auth
     clone_repository
-    run_claude
-    
-    log_message "Session completed"
-    {
-        echo ""
-        echo "=========================================="
-        echo "End Time: $(date)"
-        echo "Log saved to: $LOG_FILE"
-        echo "=========================================="
-    } >> "$LOG_FILE"
 } 2>&1 >> "$LOG_FILE"
+
+# Run Claude (outputs to both stdout for GitHub AND logs internally)
+run_claude
+
+# Final logging (log file only)
+{
+    log_message "Session completed"
+    echo ""
+    echo "=========================================="
+    echo "End Time: $(date)"
+    echo "Log saved to: $LOG_FILE"
+    echo "=========================================="
+} >> "$LOG_FILE"
 
 # Copy log to persistent location if needed
 if [ -d "/home/daniel/claude-hub/logs/claude-sessions" ]; then
