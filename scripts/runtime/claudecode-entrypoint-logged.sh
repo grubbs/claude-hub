@@ -86,7 +86,7 @@ clone_repository() {
     fi
 }
 
-# Function to run Claude with full output capture
+# Function to run Claude with proper response separation
 run_claude() {
     log_message "Starting Claude Code CLI..."
     log_message "Command length: ${#COMMAND} characters"
@@ -112,11 +112,11 @@ run_claude() {
     # Run Claude and capture ALL output for logging
     log_message "========== CLAUDE OUTPUT START =========="
     
-    # Create temporary files for processing
+    # Create temporary files for processing (using main's approach for better temp file management)
     FULL_OUTPUT="/tmp/claude_full_$$.txt"
     RESPONSE_FILE="/tmp/claude_response_$$.txt"
     
-    # Run Claude and capture everything
+    # Run Claude with full output capture to file only (NO tee to prevent double output)
     sudo -u node -E env \
         HOME=/workspace \
         CLAUDE_HOME=/workspace/.claude \
@@ -126,38 +126,37 @@ run_claude() {
         GITHUB_TOKEN="${GITHUB_TOKEN}" \
         BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS}" \
         BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS}" \
-        $CLAUDE_CMD --print "$COMMAND" 2>&1 | tee "$FULL_OUTPUT"
+        $CLAUDE_CMD --print "$COMMAND" 2>&1 > "$FULL_OUTPUT"
     
-    # Log the full output
+    # Log the full output for debugging
     cat "$FULL_OUTPUT" >> "$LOG_FILE"
     
     # Extract only Claude's response (everything after the last tool invocation)
-    # Claude Code with --print outputs the final response after all tool usage
-    # The response starts after lines that begin with "Tool:", "Using", etc.
-    
-    # Find the last line number that contains tool usage indicators
+    # Look for the last occurrence of tool usage patterns
     last_tool_line=$(grep -n "^Tool:\|^Using\|^Running\|^Executing" "$FULL_OUTPUT" 2>/dev/null | tail -1 | cut -d: -f1)
     
     if [ -n "$last_tool_line" ]; then
-        # Output everything after the last tool usage
+        # Extract everything after the last tool usage, excluding empty lines
         tail -n +$((last_tool_line + 1)) "$FULL_OUTPUT" | grep -v "^$" > "$RESPONSE_FILE"
     else
-        # No tools were used, so the entire output is the response
+        # No tools used, output the entire response
         cat "$FULL_OUTPUT" > "$RESPONSE_FILE"
     fi
     
-    # Output the response to stdout (this goes to GitHub)
+    log_message "========== CLAUDE OUTPUT END =========="
+    
+    # Output the response to stdout (this goes to GitHub) with markers
+    echo "__CLAUDE_RESPONSE_START__"
     if [ -f "$RESPONSE_FILE" ] && [ -s "$RESPONSE_FILE" ]; then
         cat "$RESPONSE_FILE"
     else
-        # If no response was extracted, output the full output as fallback
-        cat "$FULL_OUTPUT"
+        # If no response was extracted, provide a helpful error message
+        echo "❌ No response content extracted from Claude. Please check the system logs."
     fi
+    echo "__CLAUDE_RESPONSE_END__"
     
     # Clean up temporary files
     rm -f "$FULL_OUTPUT" "$RESPONSE_FILE"
-    
-    log_message "========== CLAUDE OUTPUT END =========="
 }
 
 # Main execution flow with logging

@@ -165,7 +165,19 @@ For real functionality, please configure valid GitHub and Claude API tokens.`;
 
       let responseText = result.stdout.trim();
 
-      // Check for empty response
+      // Extract response between markers if present
+      const responseMatch = responseText.match(
+        /__CLAUDE_RESPONSE_START__([\s\S]*?)__CLAUDE_RESPONSE_END__/
+      );
+      if (responseMatch) {
+        responseText = responseMatch[1].trim();
+        logger.info('Successfully extracted response using markers');
+      } else {
+        // Fallback to full stdout but with warning
+        logger.warn('Response markers not found, using full stdout');
+      }
+
+      // Check for empty response after extraction
       if (!responseText) {
         logger.warn(
           {
@@ -176,23 +188,9 @@ For real functionality, please configure valid GitHub and Claude API tokens.`;
           'Empty response from Claude Code container'
         );
 
-        // Try to get container logs as the response instead
-        try {
-          responseText = execFileSync('docker', ['logs', containerName], {
-            encoding: 'utf8',
-            maxBuffer: 1024 * 1024,
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
-          logger.info('Retrieved response from container logs');
-        } catch (e) {
-          logger.error(
-            {
-              error: (e as Error).message,
-              containerName
-            },
-            'Failed to get container logs as fallback'
-          );
-        }
+        // Return a safe error message instead of logs to prevent double-posting
+        responseText =
+          '❌ Claude did not provide a response. Please check the system logs for more information.';
       }
 
       // Sanitize response to prevent infinite loops by removing bot mentions
