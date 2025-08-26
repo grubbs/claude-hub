@@ -86,7 +86,7 @@ clone_repository() {
     fi
 }
 
-# Function to run Claude with full output capture
+# Function to run Claude with proper response separation
 run_claude() {
     log_message "Starting Claude Code CLI..."
     log_message "Command length: ${#COMMAND} characters"
@@ -109,23 +109,14 @@ run_claude() {
     # Build the full Claude command
     CLAUDE_CMD="/usr/local/share/npm-global/bin/claude --allowedTools \"${ALLOWED_TOOLS}\" --verbose"
     
-    # Run Claude and capture ALL output (stdout, stderr, and tool usage)
+    # Create temporary files for output capture
+    FULL_OUTPUT=$(mktemp)
+    RESPONSE_FILE=$(mktemp)
+    
+    # Run Claude and capture output to file (no stdout tee to prevent double output)
     log_message "========== CLAUDE OUTPUT START =========="
     
-    # Use script command to capture full terminal output including colors and tool usage
-    # Using --print flag for non-interactive execution with all environment variables
-    script -q -c "sudo -u node -E env \
-        HOME=/workspace \
-        CLAUDE_HOME=/workspace/.claude \
-        PATH=\"/usr/local/bin:/usr/local/share/npm-global/bin:\$PATH\" \
-        ANTHROPIC_API_KEY=\"\${ANTHROPIC_API_KEY}\" \
-        GH_TOKEN=\"\${GITHUB_TOKEN}\" \
-        GITHUB_TOKEN=\"\${GITHUB_TOKEN}\" \
-        BASH_DEFAULT_TIMEOUT_MS=\"\${BASH_DEFAULT_TIMEOUT_MS}\" \
-        BASH_MAX_TIMEOUT_MS=\"\${BASH_MAX_TIMEOUT_MS}\" \
-        $CLAUDE_CMD --print \"\$COMMAND\"" "$LOG_FILE.raw" 2>&1
-    
-    # Also capture with regular output for processing
+    # Run Claude with full output capture to file only
     sudo -u node -E env \
         HOME=/workspace \
         CLAUDE_HOME=/workspace/.claude \
@@ -135,16 +126,37 @@ run_claude() {
         GITHUB_TOKEN="${GITHUB_TOKEN}" \
         BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS}" \
         BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS}" \
-        $CLAUDE_CMD --print "$COMMAND" 2>&1 | while IFS= read -r line; do
-        echo "$line" | tee -a "$LOG_FILE"
-        
-        # Detect and highlight tool usage
-        if echo "$line" | grep -q "Tool:"; then
-            echo ">>> TOOL USAGE: $line" >> "$LOG_FILE"
-        fi
-    done
+        $CLAUDE_CMD --print "$COMMAND" 2>&1 > "$FULL_OUTPUT"
+    
+    # Log the full output for debugging
+    cat "$FULL_OUTPUT" >> "$LOG_FILE"
+    
+    # Extract only Claude's response (everything after the last tool invocation)
+    # Look for the last occurrence of tool usage patterns
+    last_tool_line=$(grep -n "^Tool:\|^Using\|^Running\|^Executing" "$FULL_OUTPUT" 2>/dev/null | tail -1 | cut -d: -f1)
+    
+    if [ -n "$last_tool_line" ]; then
+        # Extract everything after the last tool usage, excluding empty lines
+        tail -n +$((last_tool_line + 1)) "$FULL_OUTPUT" | grep -v "^$" > "$RESPONSE_FILE"
+    else
+        # No tools used, output the entire response
+        cat "$FULL_OUTPUT" > "$RESPONSE_FILE"
+    fi
     
     log_message "========== CLAUDE OUTPUT END =========="
+    
+    # Output the response to stdout (this goes to GitHub) with markers
+    echo "__CLAUDE_RESPONSE_START__"
+    if [ -f "$RESPONSE_FILE" ] && [ -s "$RESPONSE_FILE" ]; then
+        cat "$RESPONSE_FILE"
+    else
+        # If no response was extracted, provide a helpful error message
+        echo "❌ No response content extracted from Claude. Please check the system logs."
+    fi
+    echo "__CLAUDE_RESPONSE_END__"
+    
+    # Clean up temporary files
+    rm -f "$FULL_OUTPUT" "$RESPONSE_FILE"
 }
 
 # Main execution flow with logging
