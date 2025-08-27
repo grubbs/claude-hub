@@ -126,7 +126,15 @@ run_claude() {
         GITHUB_TOKEN="${GITHUB_TOKEN}" \
         BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS}" \
         BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS}" \
-        $CLAUDE_CMD --print "$COMMAND" 2>&1 > "$FULL_OUTPUT"
+        $CLAUDE_CMD --print "$COMMAND" > "$FULL_OUTPUT" 2>&1
+    
+    # Capture Claude's exit code
+    CLAUDE_EXIT_CODE=$?
+    
+    # Check if Claude completed successfully
+    if [ $CLAUDE_EXIT_CODE -ne 0 ]; then
+        log_message "Claude exited with code $CLAUDE_EXIT_CODE"
+    fi
     
     # Log the full output for debugging
     cat "$FULL_OUTPUT" >> "$LOG_FILE"
@@ -159,25 +167,27 @@ run_claude() {
     rm -f "$FULL_OUTPUT" "$RESPONSE_FILE"
 }
 
-# Main execution flow with logging
+# Main execution flow with selective logging
+# Run setup and auth (redirect to log file only)
 {
     setup_claude_auth
     clone_repository
-    run_claude
-    
-    log_message "Session completed"
-    {
-        echo ""
-        echo "=========================================="
-        echo "End Time: $(date)"
-        echo "Log saved to: $LOG_FILE"
-        echo "=========================================="
-    } >> "$LOG_FILE"
 } 2>&1 >> "$LOG_FILE"
 
-# Copy log to persistent location if needed
-if [ -d "/home/daniel/claude-hub/logs/claude-sessions" ]; then
-    cp "$LOG_FILE" "/home/daniel/claude-hub/logs/claude-sessions/" 2>/dev/null || true
-fi
+# Run Claude (outputs to stdout for GitHub, logs internally)
+run_claude
 
-# Don't output any summary to stdout - Claude's response has already been output
+# Final logging (log file only, no stdout)
+{
+    log_message "Session completed"
+    echo ""
+    echo "=========================================="
+    echo "End Time: $(date)"
+    echo "Log saved to: $LOG_FILE"
+    echo "=========================================="
+} >> "$LOG_FILE"
+
+# Don't output any summary to stdout - Claude's response has already been output via markers
+
+# Ensure proper script termination
+exit 0
