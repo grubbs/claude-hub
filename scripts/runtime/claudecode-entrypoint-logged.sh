@@ -126,7 +126,15 @@ run_claude() {
         GITHUB_TOKEN="${GITHUB_TOKEN}" \
         BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS}" \
         BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS}" \
-        $CLAUDE_CMD --print "$COMMAND" 2>&1 > "$FULL_OUTPUT"
+        $CLAUDE_CMD --print "$COMMAND" > "$FULL_OUTPUT" 2>&1
+    
+    # Capture Claude's exit code
+    CLAUDE_EXIT_CODE=$?
+    
+    # Check if Claude completed successfully
+    if [ $CLAUDE_EXIT_CODE -ne 0 ]; then
+        log_message "Claude exited with code $CLAUDE_EXIT_CODE"
+    fi
     
     # Log the full output for debugging
     cat "$FULL_OUTPUT" >> "$LOG_FILE"
@@ -166,10 +174,10 @@ run_claude() {
     clone_repository
 } 2>&1 >> "$LOG_FILE"
 
-# Run Claude (outputs to both stdout for GitHub AND logs internally)
+# Run Claude (outputs to stdout for GitHub, logs internally)
 run_claude
 
-# Final logging (log file only)
+# Final logging (log file only, no stdout)
 {
     log_message "Session completed"
     echo ""
@@ -179,9 +187,7 @@ run_claude
     echo "=========================================="
 } >> "$LOG_FILE"
 
-# Copy log to persistent location if needed
-if [ -d "/home/daniel/claude-hub/logs/claude-sessions" ]; then
-    cp "$LOG_FILE" "/home/daniel/claude-hub/logs/claude-sessions/" 2>/dev/null || true
-fi
+# Don't output any summary to stdout - Claude's response has already been output via markers
 
-# Don't output any summary to stdout - Claude's response has already been output
+# Ensure proper script termination
+exit 0
